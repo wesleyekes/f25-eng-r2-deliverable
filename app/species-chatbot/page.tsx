@@ -70,13 +70,13 @@ export default function SpeciesChatbotPage() {
           disabled={loading}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              void handleSubmit(); // 👈 important
+              void handleSubmit();
             }
           }}
         />
 
         <Button
-          onClick={() => void handleSubmit()} // 👈 important
+          onClick={() => void handleSubmit()}
           disabled={loading}
         >
           {loading ? "Thinking..." : "Send"}
