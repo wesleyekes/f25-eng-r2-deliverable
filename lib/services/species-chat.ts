@@ -1,9 +1,29 @@
 /* eslint-disable */
-// TODO: Import whatever service you decide to use. i.e. `import OpenAI from 'openai';`
+import OpenAI from "openai";
 
-// HINT: You'll want to initialize your service outside of the function definition
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// TODO: Implement the function below
 export async function generateResponse(message: string): Promise<string> {
-  return "hello";
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful chatbot that ONLY answers questions about animals and species. If the question is unrelated, politely say you only handle species-related topics.",
+        },
+        {
+          role: "user",
+          content: message,
+        },
+      ],
+    });
+
+    return completion.choices[0]?.message?.content ?? "Sorry, I couldn’t generate a response.";
+  } catch (err) {
+    return "Something went wrong while generating a response.";
+  }
 }

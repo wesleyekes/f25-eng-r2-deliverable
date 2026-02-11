@@ -15,13 +15,36 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type BaseSyntheticEvent } from "react";
 import { useForm } from "react-hook-form";
+
 import { z } from "zod";
+
+interface WikiSearchResponse {
+  query?: {
+    search?: {
+      title: string;
+    }[];
+  };
+}
+
+interface WikiPage {
+  extract?: string;
+  original?: {
+    source?: string;
+  };
+}
+
+interface WikiPageResponse {
+  query?: {
+    pages?: Record<string, WikiPage>;
+  };
+}
 
 // We use zod (z) to define a schema for the "Add species" form.
 // zod handles validation of the input values with methods like .string(), .nullable(). It also processes the form inputs with .transform() before the inputs are sent to the database.
@@ -87,6 +110,76 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
     mode: "onChange",
   });
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const { toast } = useToast();
+
+  // Wikipedia Fetch Function
+  async function fetchFromWikipedia() {
+    if (!searchQuery.trim()) return;
+
+    setSearching(true);
+
+    try {
+      // 1. Search Wikipedia
+      const searchRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+          searchQuery,
+        )}&format=json&origin=*`,
+      );
+
+      const searchData = (await searchRes.json()) as WikiSearchResponse;
+
+      const results = searchData.query?.search;
+      if (!results || results.length === 0) {
+        toast({
+          title: "No results found",
+          description: "No Wikipedia article matched your search.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const pageTitle = results.at(0)!.title;
+      // 2. Fetch page details
+      const pageRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&prop=extracts|pageimages&exintro=true&explaintext=true&piprop=original&titles=${encodeURIComponent(
+          pageTitle,
+        )}&format=json&origin=*`,
+      );
+
+      const pageData = (await pageRes.json()) as WikiPageResponse;
+
+      const page = pageData.query?.pages ? Object.values(pageData.query.pages)[0] : null;
+
+      if (!page) {
+        toast({
+          title: "No data found",
+          description: "Wikipedia page had no usable data.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 3. Autofill ONLY description + image
+      if (page.extract) {
+        form.setValue("description", page.extract);
+      }
+
+      if (page.original?.source) {
+        form.setValue("image", page.original.source);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch Wikipedia data.",
+        variant: "destructive",
+      });
+    } finally {
+      setSearching(false);
+    }
+  }
+
   const onSubmit = async (input: FormData) => {
     // The `input` prop contains data that has already been processed by zod. We can now use it in a supabase query
     const supabase = createBrowserSupabaseClient();
@@ -144,6 +237,18 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
             Add a new species here. Click &quot;Add Species&quot; below when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
+        <div className="mb-4 flex gap-2">
+          <Input
+            placeholder="Search Wikipedia (e.g. Snow Leopard)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Button type="button" variant="secondary" onClick={() => void fetchFromWikipedia()} disabled={searching}>
+            <Search className="mr-1 h-4 w-4" />
+            {searching ? "Searching..." : "Search"}
+          </Button>
+        </div>
+
         <Form {...form}>
           <form onSubmit={(e: BaseSyntheticEvent) => void form.handleSubmit(onSubmit)(e)}>
             <div className="grid w-full items-center gap-4">
